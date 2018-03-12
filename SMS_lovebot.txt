@@ -1,0 +1,47 @@
+# _____  _   _  _____  _____     _____  _____
+#|  ___|| \\ | |/  __ \\|  _  |   |_   _||  _  |
+#| |__  |  \\| || /  \\/| | | |     | |  | | | |
+#|  __| | . ` || |    | | | |     | |  | | | |
+#| |___ | |\\  || \\__/\\\\ \\_/ / _  _| |_ \\ \\_/ /
+#\\____/ \\_| \\_/ \\____/ \\___/ (_) \\___/  \\___/
+#__________________Generated script by enco.io
+
+# Example of a very simple conversational bot using only SMS
+# Requires that you have a SMS keywords or dedicated short/long number associated to your EnCo account
+# Please contact EnCo support for pricing information on keywords and dedicated numbers
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+    string smsMessage = data[\"message\"];
+    object regex = create(\"Regex\", \"LOVEBOT\\\\s(\\\\S+)\\\\s(\\\\S+)\", smsMessage);
+    object found = regex.find();
+     
+    if(!found) {
+        object dispatchError = create(\"SMS\", data[\"senderAddress\"], \"Wrong syntax, send: LOVEBOT NAME1 NAME2\");
+        dispatchError.send();
+    } else {
+        string name1 = regex.group(1);
+        string name2 = regex.group(2);
+        
+        object kv = create(\"KeyValue\");
+        object cached = kv.get(name1+name2);
+        string pct;
+        if(cached == null) {
+            object math = create(\"Math\");
+            double random = math.random();
+            random = random * 100;
+            random = math.round(random);
+            kv.put(name1+name2, random);
+            pct = random;
+        } else {
+            pct = cached
+        }
+        
+        
+        string loveMessage = name1 + \" loves \" + name2 + \" for \" + pct + \"%\";
+
+        object dispatchSMS0 = create(\"SMS\", data[\"senderAddress\"], loveMessage);
+    
+        dispatchSMS0.send();
+    }
+}

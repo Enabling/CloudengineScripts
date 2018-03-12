@@ -1,0 +1,126 @@
+# _____  _   _  _____  _____     _____  _____
+#|  ___|| \ | |/  __ \|  _  |   |_   _||  _  |
+#| |__  |  \| || /  \/| | | |     | |  | | | |
+#|  __| | . ` || |    | | | |     | |  | | | |
+#| |___ | |\  || \__/\\ \_/ / _  _| |_ \ \_/ /
+#\____/ \_| \_/ \____/ \___/ (_) \___/  \___/
+#__________________Generated script by enco.io
+
+# Receives undecoded messages via LoRa from Versasense devices (http://www.versasense.com)
+# Decodes the messages using regular expression matching to reconstruct a more readable payload
+# Then sends back sensor data as a new json structure to IBM Watson IoT
+
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+
+    # LORA input - tags filter on 3 different LoRa DevEUI from owned Versasense devices
+    if( (array.containsAll(tags, ["LORA", "LORADEVEUI1"]) || array.containsAll(tags, ["LORA", "LORADEVEUI2"]) || array.containsAll(tags, ["LORADEVEUI3", "LORA"])) && asset == "seaas" ) {
+        object combinedData = [];
+        object jsonObjectField;
+
+        # Fields
+        combinedData["PAYLOAD"] = data["PAYLOAD"];
+    }
+   
+    # Get & store LoRa device EUI
+    if (tags[0]=="LORA") {
+        string devaddr=tags[1];
+    }else {
+        string devaddr=tags[0];
+    }
+   
+    # Parse incoming payload with regex to determine the sensor type
+    string payload = combinedData["PAYLOAD"]
+    object sensortype = create("Regex","([0-9]{4})\\/(.*)", payload);
+    sensortype.find();
+    string peripheralid = sensortype.group(1);
+    string sensordata = sensortype.group(2);
+    
+    
+    # Build outgoing json  depending on sensor payload
+     if (peripheralid == "3303") {
+        debug.log("We have temperature and humidity");
+        object tmphum = create("Regex","(.*),(.*),(.*)", sensordata);
+        tmphum.find();
+        double tmp = tmphum.group(2);
+        double temperature = tmp / 100;
+        double hum = tmphum.group(3);
+        double humidity = hum / 100;
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"temperature\":"+temperature+",\"humidity\":"+humidity+"}";
+    } else if (peripheralid == "3324") {
+        debug.log("We have sound level");
+        object tmpsnd = create("Regex","(.*),(.*)", sensordata);
+        tmpsnd.find();
+        double snd = tmpsnd.group(2);
+        double soundlevel = (snd / 1024) * 100;
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"soundlevel\":"+soundlevel+"}";
+    } else if (peripheralid == "9803") {
+        debug.log("We have luminosity");
+        object tmplum = create("Regex","(.*),(.*)", sensordata);
+        tmplum.find();
+        double lux = tmplum.group(2);
+        double luxlevel = lux * 0.25168;
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"luminosity\":"+luxlevel+"}";
+    } else if (peripheralid == "3302") {
+        debug.log("We have presence");
+        object tmppre = create("Regex","(.*),(.*)", sensordata);
+        tmppre.find();
+        int presence = tmppre.group(2);
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"presence\":"+presence+"}";
+    } else if (peripheralid == "3313"){
+        debug.log("We have movement");
+        object tmpmov = create("Regex","([0-9]{4}),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+),([0-9]+)", sensordata);
+        tmpmov.find();
+        double movx = tmpmov.group(2);
+        double movy = tmpmov.group(3);
+        double movz = tmpmov.group(4);
+        double accx = movx * (2.0 / 32767) * 9.8;
+        double accy = movy * (2.0 / 32767) * 9.8;
+        double accz = movz * (2.0 / 32767) * 9.8;
+        double shocks = tmpmov.group(5);
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"shocks\":"+shocks+",\"accx\":"+accx+",\"accy\":"+accy+",\"accz\":"+accz+"}";
+    } else if (peripheralid == "1010") {
+        debug.log("We have battery");
+        object tmpbat = create("Regex","([0-9]{4}),([0-9]+)\/([0-9]+),(.)", sensordata);
+        tmpbat.find();
+        int alert = tmpbat.group(4);
+        double lva = tmpbat.group(2);
+        double lvb = tmpbat.group(3);
+        double lvc = lva / lvb;
+        double batlevel = 100 - (lvc * 100);
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"battery\":"+batlevel+",\"alert\":"+alert+"}";
+    } else if (peripheralid == "1000") {
+        debug.log("We have co2");
+        object tmpco = create("Regex","([0-9]{4}\\/[0-9]+),(.*)", sensordata);
+        tmpco.find();
+        double col = tmpco.group(2);
+        col = col / 1000;
+        double colevel = ((((col)-4) / 16) * 2000);
+        string outgoingmsg = "{\"deveui\":\""+devaddr+"\",\"co2level\":"+colevel+"}";
+    } else {
+		# unknown sensor type connected to VersaSense node, spitting out received container as is for ID
+        string outgoingmsg = "{\"deveui\":"+devaddr+",\"container\":"+peripheralid+",\"value\":"+sensordata+"}"; 
+    }
+	
+	# send to IBM Watson IoT on IBM Cloud via HTTP
+    if (devaddr=="LORADEVEUI1") {
+        object iothttp = create("HTTP", "https://yourorgname.messaging.internetofthings.ibmcloud.com/api/v0002/device/types/yourdevicetype/devices/yourdevicename/events/data", "POST");
+        iothttp.setPassword("yourdevicepassword");
+    } else if (devaddr=="LORADEVEUI2") {
+        object iothttp = create("HTTP", "https://yourorgname.messaging.internetofthings.ibmcloud.com/api/v0002/device/types/yourdevicetype/devices/yourdevicename/events/data", "POST");
+        iothttp.setPassword("yourdevicepassword");
+    } else {
+        object iothttp = create("HTTP", "https://yourorgname.messaging.internetofthings.ibmcloud.com/api/v0002/device/types/yourdevicetype/devices/yourdevicename/events/data", "POST");
+        iothttp.setPassword("yourdevicepassword");
+    }
+    iothttp.setUsername("use-token-auth");
+    iothttp.setContentType("application/json");
+    iothttp.setData("{\"d\":"+outgoingmsg+"}");
+    iothttp.send();
+    debug.log("HTTP outbound sent - Watson IOT");  
+}

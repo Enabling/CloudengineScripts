@@ -1,0 +1,62 @@
+# _____  _   _  _____  _____     _____  _____
+#|  ___|| \ | |/  __ \|  _  |   |_   _||  _  |
+#| |__  |  \| || /  \/| | | |     | |  | | | |
+#|  __| | . ` || |    | | | |     | |  | | | |
+#| |___ | |\  || \__/\\ \_/ / _  _| |_ \ \_/ /
+#\____/ \_| \_/ \____/ \___/ (_) \___/  \___/
+#__________________Generated script by enco.io
+
+# takes a binary input sent with arduino
+# Binary Payload:
+#    epoch_time INT
+#    temperature FLOAT
+#    humidity FLOAT
+
+
+# Basic imports
+object binary = create("Binary");
+object debug = create("Debug");
+object datetime = create("DateTime", "yyyy-MM-dd'T'HH:mm:ss");
+object weekDay = create("DateTime", "EEE");
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+	debug.setMode("HEX");
+	debug.log("Tags : " + tags);
+
+	object payload = data["BODY"];
+	debug.log(payload);
+	debug.log("Payload: " + payload.getHexString());
+
+	object date = datetime.now();
+	debug.log(datetime.format(date, "CET"));
+	debug.log(datetime.format(date, "UTC"));
+
+	binary.setData(payload);
+	binary.setByteOrder("LITTLE_ENDIAN");
+	int epochTime = binary.getNextInt();
+	debug.log("Time : " + epochTime);
+	# date.setInteger(epochTime);
+	# debug.log(datetime.format(date, "CET"));
+	epochTime = epochTime * 1000;
+	debug.log("Millis : " + epochTime);
+	date.setInteger(epochTime);
+	debug.log(datetime.format(date, "CET"));
+	string dayOfWeek = weekDay.format(date,"CET");
+	debug.log(dayOfWeek);
+	if (dayOfWeek == "Sun") {
+		debug.log("Have a nice rest")
+	} else {
+		double temp = binary.getNextFloat();
+		debug.log("Tmp : " + temp);
+		double humidity = binary.getNextFloat();
+		debug.log("Hum: " + humidity);
+		string message = "{ \"time_stamp\" : " + epochTime + ", \"air_temp\" : " + temp + ", \"rel_hum\" : " + humidity + " }";
+		debug.log("Msg: " + message);
+		object dispatchHTTP = create("HTTP", "https://example.com/tph/data", "POST");
+		dispatchHTTP.setContentType("application/json");
+		dispatchHTTP.setData(message);
+		dispatchHTTP.send();
+	}
+	debug.dump();
+}

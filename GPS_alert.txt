@@ -1,0 +1,78 @@
+# _____  _   _  _____  _____     _____  _____
+#|  ___|| \ | |/  __ \|  _  |   |_   _||  _  |
+#| |__  |  \| || /  \/| | | |     | |  | | | |
+#|  __| | . ` || |    | | | |     | |  | | | |
+#| |___ | |\  || \__/\\ \_/ / _  _| |_ \ \_/ /
+#\____/ \_| \_/ \____/ \___/ (_) \___/  \___/
+#__________________Generated script by enco.io
+
+# This script sends an SMS message when a ceratin opbject moved more than 10 meters
+# Works with an inbound HTTP endpoint simulating a GPS logger sensor
+# JSON Message to send via HTTP:
+# {
+#             "MAC":"000011112222",
+#             "lat":"50.860107",
+#             "lon":"50.69"
+# }
+
+
+function run(object data, object tags, string asset){
+    
+    # Init Local Variables
+    string SMS_destination = "+3247……."; # formet: +32xxxxxxx
+    string SMS_msg_header  = "Your Object has moved of ";
+    string SMS_msg_trailer = " meters.";
+    double Delta_distance  = 10.0; # in meters
+    double Init_Pseudo_lat = 0.0; # Proximus Towers Latitude:  50.860107;
+    double Init_Pseudo_lon = 0.0; # Proximus Towers Longitude:  4.359023
+    string Init_DB         = "{ \"name\":\"Object Positions\", \"objects\": [{ \"MAC\":\"000011112220\", \"lat\":\"0.0\", \"lon\":\"0.0\" },{ \"MAC\":\"000011112221\", \"lat\":\"0.0\", \"lon\":\"0.0\" } ]}";
+    
+    # Init Objects
+    object debug   = create("Debug");
+    object math    = create("Math");
+    object json    = create("Json");
+    object loc_DB  = create("Json");
+    object geo     = create("Geo");
+    object persist = create("KeyValue");
+    object DB      = create("KeyValue");
+   
+    # To force first position/Reset
+    #persist.delete("lat");
+    #persist.delete("lon");
+    
+    # Previous or Init Position
+    double latX = persist.getWithDefault("lat",Init_Pseudo_lat); 
+    double lonX = persist.getWithDefault("lon",Init_Pseudo_lon);
+    # DB Init
+    #string tmp_DB   = DB.getWithDefault("DB",Init_DB);
+    #string start_DB = loc_DB.parse(tmp_DB);
+
+    # Parsing HTTP
+    object parsed = json.parse(data["BODY"]);
+
+    double latY = parsed.get("lat");
+    double lonY = parsed.get("lon");
+    # Store Sensor Position as persistant value
+    persist.put("lat", latY);
+    persist.put("lon", lonY);
+    
+ 
+    # Distance?
+
+    double dist = math.round(geo.distanceKilometers(lonX, latX, lonY, latY)*1000)*1.0;
+   
+    if ((dist>Delta_distance) && (latX!=Init_Pseudo_lat) && (lonX!=Init_Pseudo_lon)) {
+        debug.log("Distance from previous position : "+dist+ " m");
+        object sms = create("SMS", SMS_destination, SMS_msg_header + dist + SMS_msg_trailer + " Present Position is Latitude=" + latY + ", Longitude=" + latY + ")");
+        #sms.setMessage("Your Object has moved of " + dist + " m");
+        sms.send();
+    } else {
+        if ((latX==Init_Pseudo_lat) && (lonX==Init_Pseudo_lon)) {
+            debug.log("First Detection/Position");
+        } else {
+            debug.log("Object hasn't moved.");
+        }
+    }
+} # End function
+
+

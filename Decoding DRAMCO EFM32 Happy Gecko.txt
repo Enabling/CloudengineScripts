@@ -28,7 +28,7 @@ object combinedData = [];
 function run(object data, object tags, string asset) {
 
     # LORA input
-    if( (array.containsAll(tags, ["LORA", "54D751CAFEA883EE"])) && asset == "seaas" ) {
+    if( (array.containsAll(tags, ["LORA", "DEVEUIOFYOURDEVICE"])) && asset == "seaas" ) {
         # Fields
         combinedData["PAYLOAD"] = data["PAYLOAD"];
     }
@@ -74,7 +74,7 @@ function run(object data, object tags, string asset) {
     
     # Send the outgoing message if we received the expected payload
     if (outgoing != null) {
-        object dispatch0_HTTP = create("HTTP", "https://bin.dev.zlz.be/bin/2c6d2f8a-f791-4cac-8375-83e4dad06a38", "POST");
+        object dispatch0_HTTP = create("HTTP", "URL OF YOURSERVER OR YOUR POSTBIN", "POST");
         dispatch0_HTTP.setContentType("application/json");
         dispatch0_HTTP.setData(outgoing);
         dispatch0_HTTP.send();

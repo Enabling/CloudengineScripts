@@ -7,7 +7,8 @@
 #__________________Generated script by enco.io
 
 # This scripts receives separate sensor values from a eWattch Ambiance device : temperature, humidity, luminosity and presence
-# It will wait until it has received the 4 sensor data from the device, and send a reconstructed json with all data at once
+# See http://www.ewattch.com/ for info on these devices
+# Script will wait until it has received the 4 sensor data from the device, and send a reconstructed json with all data at once
 # For the presence sensor (PIR sensor), it will keep the formerly received value and send the difference with the newly received value
 # Storing data in between messages is done using the "keyvalues" module
 # Finally, data is sent over MQTT to IBM Watson IOT

@@ -1,0 +1,82 @@
+# _____  _   _  _____  _____     _____  _____
+#|  ___|| \ | |/  __ \|  _  |   |_   _||  _  |
+#| |__  |  \| || /  \/| | | |     | |  | | | |
+#|  __| | . ` || |    | | | |     | |  | | | |
+#| |___ | |\  || \__/\\ \_/ / _  _| |_ \ \_/ /
+#\____/ \_| \_/ \____/ \___/ (_) \___/  \___/
+#--------------------------------------------------------------------------
+#
+# This script decodes binary payload sent by a EFM32 Happy Gecko LoRa DRAMCO development board
+# More specifically, it will decode payload that include data from the temperature and 
+# humidity sensor.
+#
+# The payloads are encoded according to Cayenne Low Power PAyload format (LPP)
+# See https://mydevices.com/cayenne/docs/lora/#lora-cayenne-low-power-payload
+#
+#--------------------------------------------------------------------------
+
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object binary = create("Binary");
+
+# Global vars
+object combinedData = [];
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+
+    # LORA input
+    if( (array.containsAll(tags, ["LORA", "54D751CAFEA883EE"])) && asset == "seaas" ) {
+        # Fields
+        combinedData["PAYLOAD"] = data["PAYLOAD"];
+    }
+
+    # Store received payload, output in hex to log
+    object payload = data["PAYLOAD"];
+    debug.setMode("HEX");
+    debug.log("PAYLOAD:"+payload.getHexString());
+
+    # Set the binary data to work with
+    binary.setData(payload);
+    
+    # Skip first channel byte as we don't need it
+    binary.getNextByte();
+    
+    # Check we have temperature payload
+    if (binary.getNextByte() == 103) {
+        # Read next 2 bytes for the temperature payload
+        double temp = binary.getNextShort();
+        double temperature = temp / 10;
+        debug.log("Temp:"+temperature);
+        # Skip channel byte for next container
+        binary.getNextByte();
+        # Skip the humidity container identifier
+        binary.getNextByte();
+        # Read 1 byte for humidity payload
+        double hum = binary.getNextByte();
+        double humidity = hum * 5/10;
+        debug.log("Humidity:"+humidity);
+        # Skip channel byte for next container
+        binary.getNextByte();
+        # Skip voltage container identifier
+        binary.getNextByte();
+        # Read next 2 bytes for the battery voltage payload
+        double volt = binary.getNextShort();
+        double battvoltage = volt / 100;
+        debug.log("Batt Voltage:"+battvoltage);
+        # Build payload to send to external world
+        string outgoing = "{\"temperature\":"+temperature+",\"humidity\":"+humidity+",\"battery\":"+battvoltage+"}";
+    } else {
+        debug.log("Not the payload we are expecting");
+    }
+    
+    # Send the outgoing message if we received the expected payload
+    if (outgoing != null) {
+        object dispatch0_HTTP = create("HTTP", "https://bin.dev.zlz.be/bin/2c6d2f8a-f791-4cac-8375-83e4dad06a38", "POST");
+        dispatch0_HTTP.setContentType("application/json");
+        dispatch0_HTTP.setData(outgoing);
+        dispatch0_HTTP.send();
+    }
+}

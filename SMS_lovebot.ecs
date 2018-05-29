@@ -34,7 +34,7 @@ function run(object data, object tags, string asset) {
             kv.put(name1+name2, random);
             pct = random;
         } else {
-            pct = cached
+            pct = cached;
         }
         
         

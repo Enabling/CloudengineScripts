@@ -1,0 +1,43 @@
+#
+# SAMPLE SCRIPT TO SUM UP ALL NATIONAL/INTERNATION COUNTS IN RTCM BINS
+# You need to add an RTCM inbound endpoint in the script's Input
+# 
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+    # RTCM input - DON'T FORGET TO REFLECT YOUR OWN TAGS IN THE IF STATEMENT BELOW
+    if( (array.containsAll(tags, ["RTCM", "YOUR_TAG"])) && asset == "cloudengine" ) {
+        # Sum up the national and internation counts in bins
+        object RTCMjson = json.parse(data["PAYLOAD"]);
+        object databins = RTCMjson.get("data");
+        object dataArray=databins.toArray();
+        int national=0;
+        int international=0;
+        object bin;
+        object binJson;
+        foreach (key in dataArray) {
+            bin=dataArray[key];
+            binJson=json.parse(bin);
+            national=national+binJson.get("national");
+            international=international+binJson.get("international");
+        }
+        # Output totals to debug log
+        debug.log("nat:" + national);
+        debug.log("int:"+ international);
+        # create a new json with the totals
+        object jsonTotal = json.createNewObjectNode();
+        jsonTotal.set("name", RTCMjson.get("name"));
+        jsonTotal.set("time", RTCMjson.get("time"));
+        jsonTotal.set("national",national);
+        jsonTotal.set("international",international);
+        # Send new json structure to destination
+        object dispatch0_HTTP = create("HTTP", "URL-OF-YOUR-ENDPOINT", "POST");
+        dispatch0_HTTP.setContentType("application/json");
+        dispatch0_HTTP.setData(jsonTotal);
+        dispatch0_HTTP.send();
+    }
+}

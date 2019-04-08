@@ -1,14 +1,9 @@
-# _____  _   _  _____  _____     _____  _____
-#|  ___|| \ | |/  __ \|  _  |   |_   _||  _  |
-#| |__  |  \| || /  \/| | | |     | |  | | | |
-#|  __| | . ` || |    | | | |     | |  | | | |
-#| |___ | |\  || \__/\\ \_/ / _  _| |_ \ \_/ /
-#\____/ \_| \_/ \____/ \___/ (_) \___/  \___/
 #--------------------------------------------------------------------------
 #
 # This script decodes binary payload sent by a EFM32 Happy Gecko LoRa DRAMCO development board
 # More specifically, it will decode payload that include data from the temperature and 
 # humidity sensor.
+# LoRa packets are coming via EnCo SEaaS (Sensor as a Service)
 #
 # The payloads are encoded according to Cayenne Low Power PAyload format (LPP)
 # See https://mydevices.com/cayenne/docs/lora/#lora-cayenne-low-power-payload

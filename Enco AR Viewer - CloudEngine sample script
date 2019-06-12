@@ -1,0 +1,33 @@
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object kvFireToken = create("KeyValue");
+
+# Entrypoint
+function run(object data, object tags, string asset) {
+
+    #########################################################################################
+    # AR APP INPUT SECTION
+    # Retrieves the firebase device token from the incoming data sent by the AR Viewer app
+    # 2 tags need to be defined in the AR app, one of them needs to be "HTTP"
+    # In this example, the following tags have been given in the AR App : HTTP,ARAPP
+    #########################################################################################
+    if( (array.containsAll(tags, ["HTTP", "ARAPP"])) && asset == "cloudengine" ) {
+        # Retrieve incoming Firebase device token
+        object jsonFirebaseData = json.parse(data["BODY"]);
+        # Store the Firebase device token is stored in a KeyValue called "MyDeviceFireBaseToken"
+        kvFireToken.put("MyDeviceFireBaseToken", jsonFirebaseData.get("FirebaseToken"));
+        debug.log("Keyvalue Token set:"+kvFireToken.get("MyDeviceFireBaseToken"));
+    #########################################################################################
+    # SENSOR TO AR APP INPUT SECTION
+    # Reads the data sent by a device to this script using HTTP inbound with tags ARDATA & HTTP
+    # Then send the data to EnCo AR App provided a key value "MyDeviceFireBaseToken" has been set
+    #########################################################################################
+    } else if( (array.containsAll(tags, ["ARDATA", "HTTP"])) && asset == "cloudengine" && kvFireToken.get("MyDeviceFireBaseToken") != null) {
+        object jsonARData = json.parse(data["BODY"]);
+        object ar_app = create("AR App", kvFireToken.get("MyDeviceFireBaseToken"));
+        ar_app.setData(jsonARData);
+        ar_app.send();
+    }
+}

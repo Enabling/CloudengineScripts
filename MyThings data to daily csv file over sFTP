@@ -1,0 +1,69 @@
+# The following CloE script takes incoming data from MyThings (Proximus LoRaWAN) and stores the received
+# data in an "IoT Store" structure in the CloudEngine. Once per day at midnight, the stored data is 
+# sent as a CSV file over sFTP to your server. The data is purged from the local store.
+# 
+# You need to configure the following INPUT ENDPOINT in your script:
+# - "MyThings - Data"
+# - "CRON"
+# For the CRON inbound endpoint, we defined as tag a CRON configuration created in the CloudEngine
+# Configuration screen. That configuration is "0 0 * * *", ie set to execute every day at 0h00.
+
+
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object iotstore = create("IoTStore");
+
+
+# Main Script Entrypoint
+function run(object data, object tags, string asset) {
+
+    # "MyThings - Data" inbound endpoint triggers this part of the script
+    if( (array.containsAll(tags, ["70B3D5475010030D", "DATA"])) && asset == "mythings" ) {
+        
+        # Convert all incoming data from MyThings from an array to a json structure 
+        object incomingJson = json.createNewObjectNode();
+        foreach (key in data) {
+            if (data[key]!=null) {
+                incomingJson.set(""+key, ""+data[key]);
+            }
+        }
+        
+        # Store to an IoT Store in a csv structure
+        # Only specific fields are stored, feel free to adapt as needed
+        object datarow = [incomingJson.get("companyName"), incomingJson.get("thingIdentifier"), incomingJson.get("thingType"), incomingJson.get("timestamp"),incomingJson.get("container"),incomingJson.get("value")];
+        string row = datarow.asCSV(null);
+        iotstore.add("mythingscsv", row); # where "mythingscsv" is a unique key name for the IoT Store
+        debug.log("Count: "+iotstore.count("mythingscsv")); # output the current number of stored lines in the debug screen
+
+
+    # "CRON" inbound endpoint triggers this part of the script
+    } else if( (array.containsAll(tags, ["CRON"])) && asset == "cloudengine" ) {
+        # Set current date and time 
+        object datetime = create("DateTime", "YYYYMMDD_HHmmss");
+        object now = datetime.now();
+        string datetimenow = datetime.format(now,"CET");
+        debug.log(datetimenow);
+        
+        # Set header for CSV file. Make sure you match the data fields you are storing in the first part of the script
+        object headerrow = ["companyName","devEUI","ThingType","timestamp","container","value"];
+        string header = headerrow.asCSV(null);
+		# Create the csv file
+        string csvfile = iotstore.getBefore("mythingscsv", null, header, now);
+        debug.log("Header set");
+        
+        # Send the csv file via sFTP 
+        object sftp = create("SFTP", "sftp://yourserver.yourdomain.com");
+        sftp.setUsername("yourusername");
+        sftp.setPassword("yourpassword");
+        sftp.setDestinationFile("localpath/somefilename.csv", csvfile);
+        sftp.send();
+        debug.log("Mail sent");
+        
+        # clear IOT Store up to "now" 
+        iotstore.deleteBefore("mythingscsv", now);
+        debug.log("IoT Store cleaned");
+    }
+
+}

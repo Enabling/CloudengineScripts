@@ -32,6 +32,7 @@ function run(object data, object tags, string asset) {
         
         # Store to an IoT Store in a csv structure
         # Only specific fields are stored, feel free to adapt as needed
+	# Mind that the ".asCSV" method will use a comma (,) as separate by default if no value is specified - check the Array object inline doc
         object datarow = [incomingJson.get("companyName"), incomingJson.get("thingIdentifier"), incomingJson.get("thingType"), incomingJson.get("timestamp"),incomingJson.get("container"),incomingJson.get("value")];
         string row = datarow.asCSV(null);
         iotstore.add("mythingscsv", row); # where "mythingscsv" is a unique key name for the IoT Store

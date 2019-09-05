@@ -1,0 +1,92 @@
+# The script is used to automate the start of multiple RTCM streams using a CRON schedule
+# Example : start 12h-long streams with 5 minutes update interval every 12 hours
+# In this version, all streams will be started with the same update frequency & duration
+#
+# In the CloE setting screen / Configuration Store: 
+# 1)Create a new element called "rtcmStreamPlanning" 
+#   Upload in this element a text file with your streams. Format of the file is:
+#   zoneName;targetType(HTTP/CLOE);targetSpecs(URL/CLoE tag)
+#   Examples:
+#       BXLCenter;HTTP;https://some.httpendpoint.org
+#       GSK;CLOE;MYTAG1
+#       Mons;HTTP;https://another.httpendpoint.org
+#       OLLN-ALL;CLOE;MYTAG2
+# 2)Create a new element called "encotoken", and store one of your permament EnCo Bearer token in it
+#
+# Do not forget to include CRON as your input endpoint and assign it your desired schedule
+
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object config = create("Config");
+
+function run(object data, object tags, string asset){ 
+    # Define here the desired stream duration and interval
+    int streamDuration = 12;
+    int streamInterval = 5;
+    
+	  # Read zone input file from CLOE config
+	  string zoneString = config.get("rtcmStreamPlanning");
+    object regex = create("Regex", "\\\\n", "\\n");
+    zoneString = regex.replaceAll(zoneString);
+    object text = create("Text");
+    object zoneLines = text.split(zoneString, "\n");
+
+    # Prep variables for loop
+    string zoneName;
+    string zoneMethod;
+    string zoneURL;
+    string cloeTags;
+    object split;
+    object httpresult;
+    object tagArray;
+    
+    object secJson = json.createNewObjectNode();
+    secJson.set("type","BASIC");
+    secJson.set("username","");
+    secJson.set("password","");
+    
+    object endpointJson = json.createNewObjectNode();
+
+    object zonePayload = json.createNewObjectNode();
+    zonePayload.set("interval",streamInterval);
+    zonePayload.set("duration",streamDuration);
+    
+    # Prep HTTP object for loop
+    object http = create("HTTP", "https://api.enco.io/rtcm/1.0.0/streams", "POST");
+    http.addHeader("Authorization", "Bearer " + config.get("encotoken"));
+    http.setContentType("application/json");
+
+    # Loop to schedule the streams
+    foreach (keyLine in zoneLines) {
+        # For each line, split it in the different fields using the ";" separator
+        split = text.split(zoneLines[keyLine], ";");
+        zoneName = split[0];
+        zoneMethod = split[1];
+        zonePayload.set("zoneName",zoneName);
+        
+        if (zoneMethod == "HTTP") {
+            endpointJson.set("type","HTTP");
+            zoneURL = split[2];
+            zoneURL = text.replace(zoneURL,"\r","");
+            endpointJson.set("address",zoneURL);
+            endpointJson.set("authorization",secJson);
+            endpointJson.remove("tags");
+        } else if (zoneMethod == "CLOE") {
+            endpointJson.set("type", "CLOE");
+            endpointJson.remove("address");
+            endpointJson.remove("authorization");
+            cloeTags = split[2];
+            cloeTags = text.replace(cloeTags,"\r","");
+            cloeTags = "[\"" + cloeTags + "\"]";
+            tagArray = json.parse(cloeTags);
+            endpointJson.set("tags",tagArray);
+        }
+        
+        zonePayload.set("endpoint",endpointJson);
+        http.setData(zonePayload);
+        httpresult = http.send();
+
+        debug.log(zonePayload);
+    }
+}

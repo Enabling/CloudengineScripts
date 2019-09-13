@@ -20,7 +20,7 @@ object iotstore = create("IoTStore");
 function run(object data, object tags, string asset) {
 
     # "MyThings - Data" inbound endpoint triggers this part of the script
-    if( (array.containsAll(tags, ["70B3D5475010030D", "DATA"])) && asset == "mythings" ) {
+    if( (array.containsAll(tags, ["DATA"])) && asset == "mythings" ) {
         
         # Convert all incoming data from MyThings from an array to a json structure 
         object incomingJson = json.createNewObjectNode();
@@ -50,7 +50,8 @@ function run(object data, object tags, string asset) {
         # Set header for CSV file. Make sure you match the data fields you are storing in the first part of the script
         object headerrow = ["companyName","devEUI","ThingType","timestamp","container","value"];
         string header = headerrow.asCSV(null);
-		# Create the csv file
+	
+	# Create the csv file
         string csvfile = iotstore.getBefore("mythingscsv", null, header, now);
         debug.log("Header set");
         

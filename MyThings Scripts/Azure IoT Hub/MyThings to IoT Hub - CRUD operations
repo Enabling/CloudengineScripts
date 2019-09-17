@@ -1,0 +1,77 @@
+# This script performs CRUD operations on IoT Hub devices based on incoming MyThings events.
+# When a LoRa device is provisioned to the network, it will be flagged as "Active" on the IoT Hub and
+# some of its attributes (device name, device type, ...) will be set as reported properties on the corresponding
+# IoT device twin.
+#
+# The "MyThings - Thing" input must be configured for this script
+# In the CloudEngine configuration store, a key "IoTHubConnectionString" has to be created, storing your hub connection string
+#
+
+# Import of basic modules
+object array = create("Array");
+object json = create("Json");
+object debug = create("Debug");
+object config = create("Config");
+
+
+# Main function
+function run(object data, object tags, string asset){ 
+	# Retrieve our IoT Hub connection string from CloudEngine's Configuration Store
+	string connectionString = config.get("IoTHubConnectionString").getString();
+	
+	# Retrieve device name and devEUI from the MyThings event data array
+	string deviceName = data["thingName"];
+	string deviceEUI = data["thingIdentifier"];
+	
+	# If no name was given to the LoRa device, set name to "LORA-DevEUI"
+	if (deviceName == "") {
+	    deviceName = "LORA"+deviceEUI;
+	}
+	
+	# Create IoT Hub Manage Device object
+	object azure_iot_manage_device = create("Azure IoT Manage Device", connectionString, deviceEUI);
+	
+	# CRUD operation based on MyThings event type
+	if (tags[1] == "ADD" ) {
+	    azure_iot_manage_device.create();
+	    debug.log("Created:" + deviceEUI);
+	    
+        # Set device status to inactive on IoTHub since not yet network provisionned
+        azure_iot_manage_device.setStatus(false);
+        azure_iot_manage_device.update();
+        debug.log(deviceEUI + " inactive");
+        
+	} else if (tags[1] == "DELETE" ) {
+	    azure_iot_manage_device.delete();
+	    debug.log(deviceEUI + " deleted");
+	    
+	} else if (tags[1] == "PROVISION" ) {
+	    # Set device status to active on IoTHub as it is now network provisionned
+        azure_iot_manage_device.setStatus(true);
+        azure_iot_manage_device.update();
+	    debug.log("Activated:" + deviceEUI);
+	    
+	    # Set twin properties for this new device as we now know it really exists on the network
+	    string devicePrimaryKey = azure_iot_manage_device.getPrimaryKey();
+	    string deviceConnectionString = "HostName=IoTHubEnCo1.azure-devices.net;DeviceId=" + deviceEUI + ";SharedAccessKey=" + devicePrimaryKey;
+	    object azure_iot_device = create("Azure IoT Device", deviceConnectionString, "AMQPS");
+	    object IoTDevProperty = [];
+	    IoTDevProperty["DeviceName"] = deviceName;
+	    string CompanyName = data["companyName"];
+	    IoTDevProperty["CompanyName"] = CompanyName;
+	    IoTDevProperty["ConnectionType"] = "LORAWAN";
+	    IoTDevProperty["NetworkProvider"]="Proximus";
+	    string devType = data["thingType"];
+	    IoTDevProperty["DeviceType"]=devType;
+        azure_iot_device.setTwinProperties(IoTDevProperty);
+        object iotdevPropSet = azure_iot_device.send();
+        debug.log("Twin properties updated");
+	    
+	} else if (tags[1] == "DEPROVISION" ) {
+	    # Set device status to inactive on IoTHub since it is now network deprovisionned
+        azure_iot_manage_device.setStatus(false);
+        azure_iot_manage_device.update();
+        debug.log("Inactive:" + deviceEUI);
+	}
+	
+}

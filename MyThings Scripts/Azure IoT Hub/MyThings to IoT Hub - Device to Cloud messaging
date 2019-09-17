@@ -1,0 +1,54 @@
+# This script will send Device-to-Cloud telemetry messages to IoT Hub devices.
+# When a LoRa message is received, the script will query the IoT Hub to get the corresponding device's connection string
+# If the message contains battery information, the script will update the corresponding device twin attribute as well
+#
+# The "MyThings - Data" input must be configured for this script
+# In the CloudEngine configuration store, a key "IoTHubConnectionString" has to be created, storing your hub connection string
+#
+
+# Basic imports
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object config = create("Config");
+
+
+# Define IoT Hub connection string
+string connectionString = config.get("IoTHubConnectionString").getString();
+
+# Main function
+function run(object data, object tags, string asset) {
+    
+    # Extract main data from the message's payload
+    string deviceEUI = data["thingIdentifier"];
+    string deviceName = data["thingName"];
+    string containerName = data["container"];
+    string valuePayload = data["value"];
+    
+    # Build IoT Hub message payload
+    object devPayload = json.createNewObjectNode();
+    devPayload.set("deviceName",deviceName);
+    devPayload.set("devEUI",deviceEUI);
+    devPayload.set("devType","LoRaWAN");
+    devPayload.set("container",containerName);
+    devPayload.set("value",valuePayload);
+    string iothPayload = devPayload.getString();
+    
+    # Get the device Primary Key and build the connection string
+    object azure_iot_manage_device = create("Azure IoT Manage Device", connectionString, deviceEUI);
+    azure_iot_manage_device.read();
+    string devicePrimaryKey = azure_iot_manage_device.getPrimaryKey();
+    string deviceConnectionString = "HostName=IoTHubEnCo1.azure-devices.net;DeviceId=" + deviceEUI + ";SharedAccessKey=" + devicePrimaryKey;
+
+    # Send the data to IoT Hub's device
+    object azure_iot_device = create("Azure IoT Device", deviceConnectionString, "AMQPS");
+    azure_iot_device.setMessageContentType("application/json");
+    azure_iot_device.setMessage(iothPayload);
+    if (devPayload.get("container") == "battery") {
+        string devBatt = devPayload.get("value");
+        azure_iot_device.setTwinProperty("battery",devBatt);
+    }
+    azure_iot_device.send();
+    azure_iot_device.close();
+    debug.log("Sent to: " + deviceEUI);
+}

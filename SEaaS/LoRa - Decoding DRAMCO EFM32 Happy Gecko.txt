@@ -22,12 +22,6 @@ object combinedData = [];
 # Entrypoint
 function run(object data, object tags, string asset) {
 
-    # LORA input
-    if( (array.containsAll(tags, ["LORA", "DEVEUIOFYOURDEVICE"])) && asset == "seaas" ) {
-        # Fields
-        combinedData["PAYLOAD"] = data["PAYLOAD"];
-    }
-
     # Store received payload, output in hex to log
     object payload = data["PAYLOAD"];
     debug.setMode("HEX");

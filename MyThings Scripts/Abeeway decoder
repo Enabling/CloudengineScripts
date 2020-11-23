@@ -1,0 +1,81 @@
+#
+# This is a sample script that shows how to use the "decode" module for Abeeway devices. 
+# With this script, the data is decoded and stored in a temporary structure ("iotstore"). Every day at midnight (UTC time), a CSV file is created
+# from the accumulated data and sent by email.
+# 
+# There are 2 inbound endpoints that need to be configured for this script to work:
+#   1) MyThings Data: to receive the undecoded messages over LoRaWAN via MyThings. Don't forget to filter the inbound endpoint only for the devices you need
+#      (Check the inline documentation for this endpoint to learn how to filter based on DevEUI, tags or other elements
+#	  2) CRON : this will trigger the second part of the script to create the csv and sent it via email
+#      (Check the inline documentation of the CRON inbound to learn how to specify your schedule). The cron schedule must be defined in the CLOE Settings panel	
+#
+
+# Import of basic modules
+object json = create("Json");
+object array = create("Array");
+object debug = create("Debug");
+object iotstore = create("IoTStore");
+
+# Start of processing
+function run(object data, object tags, string asset){
+    ########################
+    # IF INPUT MYTHINGS DATA
+    ########################
+    if( (array.containsAll(tags, ["DATA","ABEEWAY"])) && asset == "mythings" ) { # "ABEEWAY" is a tag associated on MyThings to each of our Abeeway devices, your filter may be different
+        # Decode incoming sensor data
+        debug.log(data);
+	    object decoder = create("Decoder", "abeeway");
+        object decodedAbeewayMsg = decoder.decodeToJson(data);
+        debug.log(decodedAbeewayMsg);
+        debug.log(decodedAbeewayMsg.get("messageType"));
+        
+        # Store to an IoT Store as a csv structure
+        # Only for Proximity Alert messages
+        if (decodedAbeewayMsg.get("messageType") == "PROXIMITY_DETECTION") {
+            object datetime = create("DateTime", "YYYYMMDD_HHmmss");
+            object now = datetime.now();
+            string datetimenow = datetime.format(now,"CET");
+            object datarow = [data["thingIdentifier"],decodedAbeewayMsg.get("proximityNotification").get("rollingProximityIdentifier"),decodedAbeewayMsg.get("proximityNotification").get("notificationType"),decodedAbeewayMsg.get("proximityNotification").get("closestDistanceRecording"),decodedAbeewayMsg.get("proximityNotification").get("distanceAverageRecorded"),decodedAbeewayMsg.get("proximityNotification").get("cumulatedExposure"),decodedAbeewayMsg.get("proximityNotification").get("cumulatedContactDuration"),decodedAbeewayMsg.get("proximityNotification").get("currentDailyExposure"),decodedAbeewayMsg.get("dynamicMotionState"),decodedAbeewayMsg.get("batteryVoltage"),decodedAbeewayMsg.get("trackingMode"),datetimenow];
+            string row = datarow.asCSV(null);
+            iotstore.add("abeewaycsv", row); 
+            debug.log("Count: "+iotstore.count("abeewaycsv")); # output the current number of stored lines in the debug screen
+        } else if (decodedAbeewayMsg.get("messageType") == "SHUTDOWN") {
+            # Warn administrator about device shutdown and cause
+            object mail = create("Mail");
+            mail.addTo("yourmail@yourdomain.com");
+            mail.setSubject("Abeeway Device Shutdown");
+            mail.setBody("Abeeway device " + data["thingIdentifier"] + " SHUTDOWN - Cause: " + decodedAbeewayMsg.get("shutdownCause"));;
+            mail.send();
+            debug.log("Mail sent");
+        }
+    ###################################
+    # INPUT CRON TO GENERATE DAILY FILE
+    ###################################
+    } else if( (array.containsAll(tags, ["CRON"])) && asset == "cloudengine" ) {
+
+        # Set current date and time 
+        object datetime = create("DateTime", "YYYYMMDD_HHmmss");
+        object now = datetime.now();
+        string datetimenow = datetime.format(now,"CET");
+        debug.log(datetimenow);
+        
+        # Set the header for CSV file. Make sure you match the data fields you are storing in the first part of the script
+        # Then extract data from iotstore up to our datetimenow timestamp
+        object headerrow = ["DevEUI","ProximityIdentifier","MessageType","ClosestDistanceRecording","DistanceAverageRecorded","CumulativeExposure","CumulatedContactDuration","currentDailyExposure","DynamicMotionState","BatteryLevel","MessageTimestamp"];
+        string header = headerrow.asCSV(null);
+        string csvfile = iotstore.getBefore("abeewaycsv", null, header, now);
+        string filename = "abeewaydata-"+datetimenow+".csv";
+        
+        # mail csv file 
+        object mail = create("Mail");
+        mail.addTo("youremail@yourdomain.com");
+        mail.setSubject("Abeeway Daily Data");
+        mail.addAttachment(csvfile, "text/csv", filename);
+        mail.send();
+        debug.log("Mail sent");
+        
+        # delete data from iotstore up to our timestamp
+        iotstore.deleteBefore("abeewaycsv", now);
+        debug.log("IOT Store cleared");
+    }
+}
